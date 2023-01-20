@@ -1,0 +1,12 @@
+digraph {
+	b [label=𝐛 fillcolor=white shape=ellipse style=filled]
+	s [label=𝐒 fillcolor=white shape=ellipse style=filled]
+	sigma [label=σ fillcolor=white shape=ellipse style=filled]
+	subgraph cluster_N {
+		label="N" labeljust=r labelloc=b
+		"||g||" [label="||g&#770;||" fillcolor=grey shape=ellipse style=filled]
+	}
+	sigma -> "||g||"
+	s -> "||g||"
+	b -> "||g||"
+}

@@ -1,0 +1,239 @@
+---
+title: "Comparison Full Model ODR"
+format:
+    md:
+      fig-width: 8
+      fig-height: 4
+author: Oliver Dürr
+editor: visual
+bibliography: references.bib
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(tidybayes)
+library(rstan)
+library(cmdstanr)
+library(car)
+source('mcmc_utils.R')
+options(mc.cores = parallel::detectCores())
+rstan_options(javascript=FALSE)
+```
+
+# Figure
+
+Comparison of 2D models.
+
+# Loading models
+
+```{r}
+init_fun <- function() {
+  list(
+    s = c(1,1),
+    b = c(0,0),
+    sigma=0.01
+  )
+}
+```
+
+```{r}
+ N = 10
+ b = c(0.1,-0.05)
+ S = diag(c(0.9,1.1))
+ s = c(S[1,1], S[2,2])
+```
+
+```{r}
+model.odr = cmdstan_model('../../stan_models/calibration_ODR.stan')
+model.odr$code()
+model.2D  = cmdstan_model('../../stan_models/calibration_full2D.stan')
+model.2D$code()
+```
+
+# Full Circle
+
+```{r}
+  set.seed(1)
+  acc = get_2D_Data(b=b, N = N, S = S)
+  acc_full = acc
+  x_ideal = get_2D_Data(b=b, N = 500, S = S, sigma=0.)
+  plot(acc, col=1:N,asp=1, pch='.')
+  lines(x_ideal)
+  text(acc, labels = 1:N, col='darkgreen')
+```
+
+```{r fitandplot}
+fit_and_plot = function(model, data, warmup = 50000, name='ODR'){
+  #model = model.odr
+  fit2 = model$sample(data = data, iter_warmup = warmup, iter_sampling = 10000, refresh = 2000, init = init_fun)
+  info = extract_info(fit2,data)
+  check_convergence(info)
+  mle = model$optimize(data = data, seed = 123) 
+  mle
+  print(
+    bayesplot::mcmc_trace(fit2$draws(variables = c("b", "lp__", "s")))
+  )
+  df = spread_draws(fit2, b[i], s[i])
+  return (df)
+}
+```
+
+```{r}
+data = list(N = nrow(acc), X = acc, N2=0, D=2,s_mu = 0,s_sigma = 0.5 )
+df = fit_and_plot(model.odr, data)
+df$s = 1/df$s
+df$method  = 'ODR'
+df$dataset = 'FULL'
+```
+
+```{r}
+  data = list(N = nrow(acc), x = acc[,1], y=acc[,2]) 
+  #fit = model.2D$sample(data=data, iter_warmup =  15000, iter_sampling = 2000,     refresh = 5000)
+  d = fit_and_plot(model.2D, data)
+  d$method  = '2D'
+  d$dataset = 'FULL'
+  df = bind_rows(df, d)
+```
+
+# Half cicrle
+
+```{r}
+  N = 10
+  acc = get_2D_Data(b=b, N = 21, S = S)[1:N,]
+  acc_half = acc
+  plot(acc, col=1:N, asp=1, xlim=c(-1.2,1.2),  ylim=c(-1.5,1.5))
+  text(acc, labels = 1:N, col='darkgreen')
+```
+
+```{r}
+data = list(N = nrow(acc), X = acc, N2=0, D=2)
+d = fit_and_plot(model.odr, data)
+d$s = 1/d$s
+d$method  = 'ODR'
+d$dataset = 'HALF'
+df = bind_rows(df, d)
+```
+
+```{r}
+  data = list(N = nrow(acc), x = acc[,1], y=acc[,2]) 
+  d = fit_and_plot(model.2D, data)
+  d$method  = '2D'
+  d$dataset = 'HALF'
+  df = bind_rows(df, d)
+```
+
+# Comaprison
+
+```{r, eval=FALSE}
+  df$.chain=NULL
+  df$.iteration=NULL
+  df$.draw=NULL
+  save(file='comp_2d.rda', df, acc_full, acc_half)
+```
+
+```{r}
+  #load('comp_2d.rda')
+  library(ggpubr)
+  df_id = data.frame(x_ideal)
+  
+  xc = "orange"
+  yc = "blue"
+    
+  s = c(S[1,1], S[2,2])
+    
+mytheme = ggpubr::theme_pubr() + 
+  theme(
+    axis.line.x = element_line(color = xc),
+    axis.text.x = element_text(color = xc),
+    axis.ticks.x =  element_line(color = xc),
+    axis.title.x =  element_text(color = xc),
+    
+    axis.line.y = element_line(color = yc),
+    axis.text.y = element_text(color = yc),
+    axis.ticks.y =  element_line(color = yc),
+    axis.title.y =  element_text(color = yc)
+  )  
+  
+  gh = ggplot() + 
+     geom_point(data=df_id, aes(x=X1,y=X2), size=.02, col='lightgray') +
+    geom_point(data=data.frame(acc_half), aes(x=X1,y=X2), size=2) + 
+    xlim(-1.3, 1.3) + ylim(-1.3, 1.5) +
+    scale_x_continuous(breaks = c(-1, 0, 1)) +
+    scale_y_continuous(breaks = c(-1, 0, 1)) +
+    labs(x=expression(a[x]), y=expression(a[y]))  + mytheme
+
+  gf =  ggplot() + 
+     geom_point(data=df_id, aes(x=X1,y=X2), size=.02, col='lightgray') +
+    geom_point(data=data.frame(acc_full), aes(x=X1,y=X2), size=2) +  
+    xlim(-1.3, 1.3) + ylim(-1.3, 1.5) +
+     scale_x_continuous(breaks = c(-1, 0, 1)) +
+    scale_y_continuous(breaks = c(-1, 0, 1)) +
+   labs(x=expression(a[x]), y=expression(a[y])) +  mytheme
+
+  g1 = df %>% filter(dataset=='FULL') %>% 
+  ggplot() + 
+    geom_density(aes(x = b, col=as.factor(i), linetype=method)) +
+    #geom_vline(xintercept = b) +
+    #facet_wrap(. ~ dataset, scales = 'free')
+    xlim(-0.3,.3) +
+    theme_pubr() + 
+    scale_color_manual(values = c(xc, yc))  
+    #geom_vline(xintercept = b[1], color = xc, linetype = "dashed", ymax=1) + 
+    #geom_vline(xintercept = b[2], color = yc, linetype = "dashed", ymax=1)
+  g1 
+  
+  g2 = df %>% filter(dataset=='HALF') %>% 
+    ggplot() + 
+      geom_density(aes(x = b, col=as.factor(i), linetype=method)) +
+      #geom_vline(xintercept = b) +
+      #facet_wrap(. ~ dataset, scales = 'free')
+      coord_cartesian(ylim=c(0,20), xlim=c(-0.3,0.3))+
+      scale_color_manual(values = c(xc, yc)) +
+     # geom_vline(xintercept = b[1], color = xc, linetype = "dashed") + 
+    #  geom_vline(xintercept = b[2], color = yc, linetype = "dashed") +
+      
+      theme_pubr() 
+  g2 
+  
+  
+  g3 = df %>% filter(dataset=='FULL') %>% 
+  ggplot() + 
+    geom_density(aes(x = s, col=as.factor(i), linetype=method)) +
+    #geom_vline(xintercept = b) +
+    #facet_wrap(. ~ dataset, scales = 'free')
+    xlim(0.8,1.2) +
+    scale_color_manual(values = c(xc, yc)) +
+   #   geom_vline(xintercept = s[1], color = xc, linetype = "dashed") + 
+    #  geom_vline(xintercept = s[2], color = yc, linetype = "dashed") +
+    ggpubr::theme_pubr() 
+  g3 
+  
+  g4 = df %>% filter(dataset=='HALF') %>% 
+    ggplot() + 
+      geom_density(aes(x = s, col=as.factor(i), linetype=method)) +
+      xlim(0.8,1.2) +
+      #geom_vline(xintercept = b) +
+      #facet_wrap(. ~ dataset, scales = 'free')
+      scale_color_manual(values = c(xc, yc)) +
+    #  geom_vline(xintercept = s[1], color = xc, linetype = "dashed") + 
+    #  geom_vline(xintercept = s[2], color = yc, linetype = "dashed") +
+      ggpubr::theme_pubr() +
+      coord_cartesian(ylim=c(0,20))
+  g4 
+  
+ p = ggpubr::ggarrange(gf,gh,g1,g2,g3,g4, ncol = 2, nrow = 3,heights = c(1,1,1), legend = 'none')
+  if (FALSE){
+    ggsave(
+      p,
+      filename = '~/Dropbox/Apps/Overleaf/bayes_calib/figures/2DcomparisonB.pdf',  
+      width = 4, height = 6
+    )
+    ggsave(
+      p,
+      filename = '2DcomparisonB.pdf',  
+      width = 4, height = 6
+    )
+  }
+  p 
+  
+```

@@ -1,0 +1,291 @@
+---
+title: "calibration"
+format:
+    html:
+      fig-width: 8
+      fig-height: 4
+      code-fold: true
+      code-tools: true
+author: Oliver Dürr
+editor: visual
+bibliography: references.bib
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(tidybayes)
+library(rstan)
+library(cmdstanr)
+library(car)
+library(rgl)
+options(mc.cores = parallel::detectCores())
+rstan_options(javascript=FALSE)
+source('mcmc_utils.R')
+```
+
+### Loading of Stan Files
+
+Results for various 3D testdata
+
+***In the ODR Case initial values of Stan causes Problems***
+
+```{r}
+init_fun <- function() {
+  list(
+    s = c(1,1,1),
+    b = c(0,0,0),
+    sigma=0.01
+  )
+}
+```
+
+### Glove
+
+#### Loading the data
+
+```{r}
+load_data_3 = function(file_name){
+  #Up-Down Recod
+  df <- read.csv(file_name, header=FALSE)
+  colnames(df) = c('IMU', 'time','q1', 'q2', 'q3', 'q4','yaw','pitch','roll',
+                   'accel_x', 'accel_y', 'accel_z', 'gyro_x', 'gyro_y', 'gyro_z',
+                   'mag_x', 'mag_y', 'mag_z', 'y'
+                   )
+  df$t=rep(1:(1+nrow(df)/6), each=6)[1:nrow(df)]
+  #The accelerometer data has not been scaled (it's a signed number in the range -2g, 2g)
+  #For the default configuration
+  #We divide by 2^16/4 = 16334
+  df$accel_x = df$accel_x / (16384/2)
+  df$accel_y = df$accel_y / (16384/2)
+  df$accel_z = df$accel_z / (16384/2)
+  return(df)
+}
+
+getacc = function(dat_zpm1, IMUval){
+  imu_5_no_move = dat_zpm1 %>% filter(IMU == IMUval, y>0)%>% select(starts_with('acc'))
+  return(imu_5_no_move)
+}
+```
+
+```{r}
+model.odr.rob = cmdstan_model("../../stan_models/calibration_ODR.stan")
+model.3D.rob = cmdstan_model("../../stan_models/calibration_full3D.stan")
+```
+
+```{r}
+plot_Calibration <- function(acc, acc2, fn, radius = 1) {
+  if (TRUE){
+    # Define the center and radius of the sphere
+    center <- c(0, 0, 0)
+    # Create a sequence of angles for the sphere
+    theta <- seq(0, 2*pi, length.out = 30)
+    phi <- seq(0, pi, length.out = 30)
+    # Create matrices of x, y, and z coordinates for the sphere
+    x <- radius * outer(cos(theta), sin(phi)) + center[1]
+    y <- radius * outer(sin(theta), sin(phi)) + center[2]
+    z <- radius * outer(rep(1, length(theta)), cos(phi)) + center[3]
+    # Plot the sphere using the surface3d function
+    surface3d(x, y, z, col = "gray", alpha = 0.1)
+  }
+  points3d(acc2[,1], acc2[,2], acc2[,3], col = "lightblue", size = 15)
+  points3d(acc[,1], acc[,2], acc[,3], col = "pink", size = 15)
+  
+  rgl::text3d(1.2,0,0,"X")
+  rgl::text3d(0,1.2,0,"Y")
+  rgl::text3d(0,0,1.2,"Z")
+  arrow3d(c(0, 0, 0),c( 0, 0, 1), col = "black")
+  arrow3d(c(0, 0, 0),c( 0, 1, 0), col = "black")
+  arrow3d(c(0, 0, 0),c( 1, 0, 0), col = "black")
+  rgl::view3d(theta = 30, phi = 30)
+  rgl::par3d(zoom = 0.75)
+  rgl::rgl.snapshot(fn, fmt = "png",top = TRUE)
+}
+```
+
+```{r}
+dat_zpm1 = load_data_3(file_name="../../data/1_calib_NoOffSet.csv")
+acc = getacc(dat_zpm1, IMUval = 5)
+acc1 = getacc(dat_zpm1, IMUval = 2)
+plot_Calibration(acc, acc1, fn='glove_before_cal.png')
+```
+
+```{r, eval=FALSE}
+res = list()
+res2 = list()
+dat_zpm1 = load_data_3(file_name="../../data/1_calib_NoOffSet.csv")
+for (IMUval in 0:5){
+  
+  acc = getacc(dat_zpm1, IMUval = IMUval)
+  plot(sqrt(acc[,1]^2 + acc[,2]^2 + acc[,3]^2))
+  #plot_Calibration(acc)
+  qqPlot(sqrt(acc[,1]^2 + acc[,2]^2 + acc[,3]^2))
+  
+  N = nrow(acc)
+  data = list(N = nrow(acc), D=3L,X = acc) 
+  fit2 = model.odr.rob$sample(data = data, init = init_fun, refresh = 2000, iter_warmup = 10000)
+  
+  data_3D = list(N = nrow(acc),x = acc[,1], y=acc[,2], z=acc[,3]) 
+  fit3D = model.3D.rob$sample(data = data_3D, iter_warmup = 50000, refresh = 2000)
+  
+  
+  #Checking the convergences
+  #fit2 = res2[[1]]$fit2
+  bayesplot::mcmc_trace(fit2$draws(variables = c("b", "lp__"))) + 
+    labs(title=paste0('ODR IMU ', IMUval))
+  bayesplot::mcmc_trace(fit3D$draws(variables = c("b", "lp__")))  + 
+    labs(title=paste0('3D Model IMU ', IMUval))
+  
+   d = list(
+    IMUval = IMUval,
+    coef_3D = get_calibration_coef(fit3D),
+    info_3D = extract_info(fit3D, data='Egal'),
+    coef_ODR = get_calibration_coef(fit2),
+    info_ODR = extract_info(fit2, data='Egal')
+  )
+  res[[IMUval + 1]] = d
+  res2[[IMUval + 1]] = list(fit2=fit2, fit3D=fit3D)
+  #save(res2, file='Glove_16_Jan_2022_non_robust_big.rda')
+  #save(res, file='Glove_16_Jan_2022_non_robust.rda')
+}
+```
+
+```{r}
+load('Glove_16_Jan_2022_non_robust.rda')
+df = NULL
+for (i in 1:6){
+  d = res[[i]]
+  d1 = d$info_ODR$summary[1:8,] %>% select(variable, mean, median, q5,q95, rhat, ess_bulk) 
+  d1$num = 1:8
+  d1$name = 'ODR'
+  d1$IMU =as.integer(d$IMUval)
+  #d2 = d$info_3D$summary[1:8,]%>% select(variable, mean, q5,q95, rhat, ess_bulk) 
+  #d2$name = '3D'
+  #d2$num=1:8
+  #d2$IMU = as.integer(d$IMUval)
+  #df = bind_rows(df,d1,d2)
+  df = bind_rows(df,d1)
+}
+```
+
+```{r}
+max(df$rhat)
+```
+
+```{r}
+df
+dd = df %>% 
+  filter(variable != "lp__") %>% filter(variable != "sigma") 
+dd$IMU = paste("IMU ", dd$IMU)
+g1 = ggplot(dd) + 
+  geom_crossbar(aes(x=variable, y = median, ymin=q5, ymax=q95), size=0.5,col='blue') + 
+  geom_point(aes(x=variable, y=median, col=name), size=0.05) +  
+  #geom_point(aes(x=variable, y=rhat, col=name), shape=1)+
+  ylim(-1.6,1.2) + 
+  labs(x= NULL, y='Estimates (q5, median, q95)') + 
+  scale_x_discrete(breaks = c("b[1]", "b[2]", "b[3]","s[1]", "s[2]", "s[3]"), 
+                   labels = expression(b[1], b[2], b[3], s[1]^{-1}, s[2]^{-1}, s[3]^{-1}))  +
+  guides(col=NULL) +
+  geom_hline(yintercept = c(0,1), col='lightgray', size=0.5, linetype=2)+
+  theme_pubr(legend = 'none', border = TRUE)+
+  facet_wrap(vars(IMU))
+g1
+ggsave(filename = 'glove_est.pdf', g1, width = 6, height = 3)
+ if (FALSE){
+  ggsave(filename = '~/Dropbox/Apps/Overleaf/bayes_calib/figures/glove_est.pdf', g1, width = 6, height = 3)
+}
+```
+
+### Demonstrating the Effect of calibration
+
+```{r}
+calibrate2 <- function(acc, b,s) {
+  cal_acc = data.frame(
+    accel_x = s[1]*(acc[,1] - b[1]),
+    accel_y = s[2]*(acc[,2] - b[2]),
+    accel_z = s[3]*(acc[,3] - b[3])
+  )
+  return(cal_acc)
+}
+```
+
+**Attention hacky code below, need to be adpated for a new meassuremnt**s
+
+```{r}
+df_effect = NULL
+
+for (IMUval in 0:5){
+  dat_train = load_data_3(file_name="../../data/1_calib_NoOffSet.csv")
+  acc_training = getacc(dat_train, IMUval = IMUval)
+  acc_training$num = 1:nrow(acc_training)
+  acc_training$type = 'raw'
+  acc_training$IMU=IMUval
+  
+  meds = df %>% filter(IMU == IMUval) %>% select(median)
+  b = meds[2:4,]
+  s = meds[6:8,]
+  cal_acc_training = calibrate2(acc_training, b$median, s$median)
+  cal_acc_training$num = 1:nrow(acc_training)
+  cal_acc_training$type = 'cal'
+  cal_acc_training$IMU=IMUval
+  df_effect = bind_rows(df_effect, acc_training, cal_acc_training)
+  
+  
+  
+  dat_test = load_data_3(file_name="../../data/1_calib_NoOffSet2.csv")
+  acc_test = getacc(dat_test, IMUval = IMUval)
+  acc_test$num = 45:(44+nrow(acc_test))
+  acc_test$type = 'raw'
+  acc_test$IMU = IMUval
+  cal_acc_test = calibrate2(acc_test, b$median, s$median)
+  cal_acc_test$num = 45:(44+nrow(acc_test))
+  cal_acc_test$type = 'cal'
+  cal_acc_test$IMU = IMUval
+  
+  df_effect = bind_rows(df_effect, acc_test, cal_acc_test)
+}
+```
+
+```{r}
+  df_effect = df_effect %>% mutate(g = sqrt(accel_x^2 + accel_y^2 + accel_z^2))
+  
+  g1 = df_effect %>% 
+    filter(type == 'raw') %>% 
+    ggplot() + 
+    geom_point(aes(x=num, y=g, col=as.factor(IMU))) + 
+    geom_line(aes(x=num, y=g, col=as.factor(IMU))) +
+    geom_vline(xintercept = 44.5, col='gray') +
+    ylim(0.5,2.5) +
+    ylab("||g||") + xlab('index') +
+    guides(col=guide_legend(title="IMU Number")) +
+    theme_pubr(base_size = 18)
+    
+  g2 = df_effect %>% 
+    filter(type == 'cal') %>% 
+    ggplot() + 
+    geom_point(aes(x=num, y=g, col=as.factor(IMU))) + 
+    geom_line(aes(x=num, y=g, col=as.factor(IMU))) +
+    geom_vline(xintercept = 44.5, col='gray') +
+    annotate(geom = "text", x = 35, y = 1.05, label = "Training") + 
+    annotate(geom = "text", x = 50, y = 1.05, label = "Test") + 
+    ylab("||g||") + xlab('index') +
+    ylim(0.9,1.1) +
+    theme_pubr(legend = 'none', base_size = 18)
+  
+  g = ggarrange(g1,g2, ncol = 1,heights = c(1.5,1))
+  g
+  ggsave(filename = 'glove_cal.pdf', g, width = 12, height = 8)
+  if (FALSE){
+     ggsave(filename = '~/Dropbox/Apps/Overleaf/bayes_calib/figures/glove_cal.pdf', g, width = 12, height = 8)
+  }
+```
+
+```{r}
+  calib = df_effect %>% filter(type=='cal', IMU==5) %>% filter(num<45)
+  calib2 = df_effect %>% filter(type=='cal', IMU==2) %>% filter(num<45)
+  plot_Calibration(calib, calib2, fn='glove_after_cal.png')
+```
+
+```{r}
+
+
+```
