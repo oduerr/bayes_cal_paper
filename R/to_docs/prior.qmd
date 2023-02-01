@@ -1,0 +1,39 @@
+---
+title: "calibration"
+format:
+    html:
+      fig-width: 8
+      fig-height: 4
+      code-fold: true
+      code-tools: true
+author: Oliver Dürr
+editor: visual
+bibliography: references.bib
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+```
+
+# 
+
+```{r}
+vals = seq(0,5, length.out=500)
+d = data.frame(
+  vals = vals,
+  s = dlnorm(vals, meanlog=0, sdlog=0.5),
+  b = dnorm(vals, 0,1),
+  #sigma_ra = dlnorm(vals, 0, 1),
+  sigma = dnorm(vals, 0, 0.2)
+) %>% pivot_longer(2:4, names_to = 'prior', values_to = 'density') 
+g = ggplot(d) + geom_line(aes(x=vals, y=density, col=prior), size=1.5) + 
+  labs(x='values') + 
+  ggpubr::theme_pubr(legend = c(0.8,0.80 )) 
+g
+ggsave(g, filename='prior.pdf', height=3, width=1.61*3)
+if (FALSE){
+  ggsave(g, filename='~/Dropbox/Apps/Overleaf/bayes_calib/figures/prior.pdf', height=3, width=1.61*3)
+}
+```
+
+## 

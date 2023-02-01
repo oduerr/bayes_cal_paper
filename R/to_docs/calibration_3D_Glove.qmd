@@ -195,6 +195,28 @@ ggsave(filename = 'glove_est.pdf', g1, width = 6, height = 3)
 }
 ```
 
+```{r}
+library(knitr)
+library(kableExtra)
+df
+dd = df %>% 
+  filter(variable != "lp__") %>% filter(variable != "sigma") 
+dd = dd %>% mutate(cell = paste0(round(median,2), " (", round(q5,2), ", ", round(q95,2), ")"))
+lt = dd %>% select(variable, IMU, cell) %>% 
+  filter(startsWith(variable,'b')) %>% 
+  pivot_wider(names_from = variable, values_from = cell) %>% 
+  knitr::kable(format = "latex")  %>% 
+  kable_styling(latex_options = "hold_position")
+
+lt2 = dd %>% select(variable, IMU, cell) %>% 
+  filter(startsWith(variable,'s')) %>% 
+  pivot_wider(names_from = variable, values_from = cell) %>% 
+  knitr::kable(format = "latex")  %>% 
+  kable_styling(latex_options = "hold_position")
+
+
+```
+
 ### Demonstrating the Effect of calibration
 
 ```{r}
@@ -231,7 +253,10 @@ for (IMUval in 0:5){
   
   
   
-  dat_test = load_data_3(file_name="../../data/1_calib_NoOffSet2.csv")
+  #dat_test = load_data_3(file_name="../../data/1_calib_NoOffSet2.csv")
+  dat_test = load_data_3(file_name="../../data/3_calib_fixed.csv")
+  #There where some movements in the video for position 5,6,7 so removed them
+  dat_test = dat_test %>% filter(y > 0 & time < 40000)
   acc_test = getacc(dat_test, IMUval = IMUval)
   acc_test$num = 45:(44+nrow(acc_test))
   acc_test$type = 'raw'
@@ -240,7 +265,6 @@ for (IMUval in 0:5){
   cal_acc_test$num = 45:(44+nrow(acc_test))
   cal_acc_test$type = 'cal'
   cal_acc_test$IMU = IMUval
-  
   df_effect = bind_rows(df_effect, acc_test, cal_acc_test)
 }
 ```
@@ -255,9 +279,9 @@ for (IMUval in 0:5){
     geom_line(aes(x=num, y=g, col=as.factor(IMU))) +
     geom_vline(xintercept = 44.5, col='gray') +
     ylim(0.5,2.5) +
-    ylab("||g||") + xlab('index') +
+    ylab("||g|| (uncalibrated)") + xlab('index') +
     guides(col=guide_legend(title="IMU Number")) +
-    theme_pubr(base_size = 18)
+    theme_pubr()
     
   g2 = df_effect %>% 
     filter(type == 'cal') %>% 
@@ -265,17 +289,17 @@ for (IMUval in 0:5){
     geom_point(aes(x=num, y=g, col=as.factor(IMU))) + 
     geom_line(aes(x=num, y=g, col=as.factor(IMU))) +
     geom_vline(xintercept = 44.5, col='gray') +
-    annotate(geom = "text", x = 35, y = 1.05, label = "Training") + 
-    annotate(geom = "text", x = 50, y = 1.05, label = "Test") + 
-    ylab("||g||") + xlab('index') +
+    annotate(geom = "text", x = 35, y = 1.05, label = "Training", size=5) + 
+    annotate(geom = "text", x = 50, y = 1.05, label = "Test", size=5) + 
+    ylab("||g|| (calibrated)") + xlab('index') +
     ylim(0.9,1.1) +
-    theme_pubr(legend = 'none', base_size = 18)
+    theme_pubr(legend = 'none')
   
-  g = ggarrange(g1,g2, ncol = 1,heights = c(1.5,1))
+  g = ggarrange(g1,g2, ncol = 1,heights = c(1,1))
   g
-  ggsave(filename = 'glove_cal.pdf', g, width = 12, height = 8)
+  ggsave(filename = 'glove_cal.pdf', g, width = 6, height = 4)
   if (FALSE){
-     ggsave(filename = '~/Dropbox/Apps/Overleaf/bayes_calib/figures/glove_cal.pdf', g, width = 12, height = 8)
+     ggsave(filename = '~/Dropbox/Apps/Overleaf/bayes_calib/figures/glove_cal.pdf', g, width = 6*1., height = 4*1.)
   }
 ```
 
