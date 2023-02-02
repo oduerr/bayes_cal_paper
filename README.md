@@ -2,7 +2,7 @@
 
 ## Running on own data (in python)
 
-The R code used in the paper can be found at [R/larger_simulation/calibration_3D_Glove.qmd](R/larger_simulation/calibration_3D_Glove.qmd). The following example is taken from [python/simple_calibration.ipnb](python/simple_calibration.ipnb)
+The R code used in the paper can be found at [R/to_docs/calibration_3D_Glove.qmd](R/to_docs/calibration_3D_Glove.qmd). The following example is taken from [python/simple_calibration.ipynb](python/simple_calibration.ipynb)
 
 ### Data Collection
 
@@ -50,7 +50,9 @@ The effect of calibration is visible by looking at
 
 $$
 ||g|| = \sqrt{a_x^2+a_y^2+a_z^2}
-$$ before and after calibration. Since the device is not moving it should be close to 1 in all positions, they noise come from our far from perfect recording.
+$$ 
+
+before and after calibration. Since the device is not moving it should be close to 1 in all positions, they noise come from our far from perfect recording.
 
 ![](calibration_IMU2.png)
 
