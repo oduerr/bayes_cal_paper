@@ -9,7 +9,7 @@ To see how to use the calibration in R you can have e.g. a look at [R/to_docs/ca
 When recording, make sure to take data at many different rotations (you don't have to know the exact angle). Try to keep the device still during the recordings. You'll be recording the acceleration and it should look something like this.
 
 ``` python
-accel = pd.read_csv('../data/IMU5.txt')
+accel = pd.read_csv('../data/IMU2.txt')
 accel.head(5)
 ```
 
