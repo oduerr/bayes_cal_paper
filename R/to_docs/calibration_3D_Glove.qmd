@@ -107,6 +107,7 @@ dat_zpm1 = load_data_3(file_name="../../data/1_calib_NoOffSet.csv")
 acc = getacc(dat_zpm1, IMUval = 5)
 acc1 = getacc(dat_zpm1, IMUval = 2)
 plot_Calibration(acc, acc1, fn='glove_before_cal.png')
+#write_csv(acc1, file="../../data/IMU2.txt")
 ```
 
 ```{r, eval=FALSE}
