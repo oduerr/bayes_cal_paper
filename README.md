@@ -2,7 +2,7 @@
 
 ## Running on own data (in python)
 
-The R code used in the paper can be found at [R/to_docs/calibration_3D_Glove.qmd](R/to_docs/calibration_3D_Glove.qmd). The following example is taken from [python/simple_calibration.ipynb](python/simple_calibration.ipynb)
+To see how to use the calibration in R you can have e.g. a look at [R/to_docs/calibration_3D_Glove.qmd](R/to_docs/calibration_3D_Glove.qmd) all results discussed the paper are produced in R. The following example is taken from [python/simple_calibration.ipynb](python/simple_calibration.ipynb)
 
 ### Data Collection
 
