@@ -1,3 +1,11 @@
+#Ignoring compiled stan code 
+stan_models/calibration_full3D
+stan_models/calibration_full2D
+stan_models/calibration_ODR
+
+#Pycharm stuff
+python/.idea/*
+
 # History files
 .Rhistory
 .Rapp.history
@@ -40,4 +48,6 @@ vignettes/*.pdf
 
 *.Rproj
 
-python/.idea/*
+
+
+
