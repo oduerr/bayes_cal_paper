@@ -6,9 +6,8 @@ data {
 }
 parameters {
   row_vector[3] b;
-  //Note that this "s" corresponds to sinv
   row_vector<lower=0>[3] s;
-  real<lower=0> sigma;// The noise in xy-Direction
+  real<lower=0> sigma;
   vector<lower=0, upper = pi()>[N-1] theta;
   vector<lower=0, upper = 2*pi()>[N-1] phi;
   //Maybe replace theta sometime
